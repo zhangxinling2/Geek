@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -91,28 +92,34 @@ func (r *router) findRoute(method string, path string) (*matchInfo, bool) {
 	}
 	//将path切割并一层一层的向下搜索
 	segs := strings.Split(path[1:], "/")
+	info := &matchInfo{}
 	for _, seg := range segs {
 		child, ok := root.childOf(seg)
 		if !ok {
 			//还有一种通配符在末尾可以匹配后续所有路径
-			if child.typ != nodeTypeAny {
+			if root.typ != nodeTypeAny {
 				return nil, false
 			} else {
 				return &matchInfo{n: root}, true
 			}
 			return nil, false
 		}
+		if child.paramName != "" {
+			info.addValue(child.paramName, seg)
+		}
 		root = child
 	}
+	info.n = root
 	if root.handler == nil {
-		return nil, false
+		return &matchInfo{n: root}, true
 	}
+	// expected: map[string]string{"id":"123"} 		actual  : map[string]string(nil)		debug发现:id的handle没有注册上,在注册路由时没有判断是否已存在路径路由
 	if root.typ == nodeTypeParam || root.typ == nodeTypeReg {
-		info := &matchInfo{}
+		info := &matchInfo{n: root}
 		info.addValue(root.paramName, segs[len(segs)-1])
 		return info, true
 	}
-	return &matchInfo{n: root}, true
+	return info, true
 }
 
 type nodeType int
@@ -220,6 +227,12 @@ func (n *node) childOrCreate(path string) *node {
 				panic("web: 非法路由，已有路径参数路由。不允许同时注册正则路由和参数路由 [" + path + "]")
 			}
 			name, reg := parseReg(path)
+			if n.regChild != nil {
+				if n.regChild.regExpr != reg || n.paramName != name {
+					panic(fmt.Sprintf("web: 路由冲突，正则路由冲突，已有 %s，新注册 %s", n.regChild.path, path))
+				}
+				return n.regChild
+			}
 			n.regChild = &node{
 				path:      path,
 				typ:       nodeTypeReg,
@@ -234,8 +247,11 @@ func (n *node) childOrCreate(path string) *node {
 			if n.regChild != nil {
 				panic("web: 非法路由，已有正则路由。不允许同时注册正则路由和参数路由 [" + path + "]")
 			}
-			if n.paramChild != nil && n.paramChild.path != path {
-				panic("web: 路由冲突，参数路由冲突，已有 " + n.paramChild.path + "，新注册 " + path)
+			if n.paramChild != nil {
+				if n.paramChild.path != path {
+					panic("web: 路由冲突，参数路由冲突，已有 " + n.paramChild.path + "，新注册 " + path)
+				}
+				return n.paramChild
 			}
 			n.paramChild = &node{
 				path:      path,
