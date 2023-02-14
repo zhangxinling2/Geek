@@ -599,3 +599,289 @@ func Test_router_findRoute(t *testing.T) {
 		})
 	}
 }
+func paramEqual(p1, p2 map[string]string) bool {
+	if len(p1) != len(p2) {
+		return false
+	}
+	for k, v := range p1 {
+		if p2[k] != v {
+			return false
+		}
+	}
+	return true
+}
+func find(r *router, tc struct {
+	name   string
+	method string
+	path   string
+	found  bool
+	mi     *matchInfo
+}) bool {
+	mi, found := r.findRoute(tc.method, tc.path)
+	if found != tc.found {
+		return false
+	}
+	if !found {
+		return false
+	}
+	if !paramEqual(tc.mi.pathParams, mi.pathParams) {
+		return false
+	}
+	if tc.mi.n.path != mi.n.path {
+		return false
+	}
+
+	n := mi.n
+	wantVal := reflect.ValueOf(tc.mi.n.handler)
+	nVal := reflect.ValueOf(n.handler)
+	if wantVal != nVal {
+		return false
+	}
+	return true
+}
+
+func BenchmarkFindRoot(b *testing.B) {
+	testRoutes := []struct {
+		method string
+		path   string
+	}{
+		{
+			method: http.MethodGet,
+			path:   "/",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/user",
+		},
+		{
+			method: http.MethodPost,
+			path:   "/order/create",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/user/*/home",
+		},
+		{
+			method: http.MethodPost,
+			path:   "/order/*",
+		},
+		// 参数路由
+		{
+			method: http.MethodGet,
+			path:   "/param/:id",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/param/:id/detail",
+		},
+		{
+			method: http.MethodGet,
+			path:   "/param/:id/*",
+		},
+
+		// 正则
+		{
+			method: http.MethodDelete,
+			path:   "/reg/:id(.*)",
+		},
+		{
+			method: http.MethodDelete,
+			path:   "/:id([0-9]+)/home",
+		},
+	}
+	mockHandler := func(ctx *Context) {}
+	r := newRouter()
+	for _, tr := range testRoutes {
+		r.addRoute(tr.method, tr.path, mockHandler)
+	}
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+		found  bool
+		mi     *matchInfo
+	}{
+		{
+			name:   "method not found",
+			method: http.MethodHead,
+		},
+		{
+			name:   "path not found",
+			method: http.MethodGet,
+			path:   "/abc",
+		},
+		{
+			name:   "root",
+			method: http.MethodGet,
+			path:   "/",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "/",
+					handler: mockHandler,
+				},
+			},
+		},
+		{
+			name:   "user",
+			method: http.MethodGet,
+			path:   "/user",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "user",
+					handler: mockHandler,
+				},
+			},
+		},
+		{
+			name:   "no handler",
+			method: http.MethodPost,
+			path:   "/order",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path: "order",
+				},
+			},
+		},
+		{
+			name:   "two layer",
+			method: http.MethodPost,
+			path:   "/order/create",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "create",
+					handler: mockHandler,
+				},
+			},
+		},
+		// 通配符匹配
+		{
+			// 命中/order/*
+			name:   "star match",
+			method: http.MethodPost,
+			path:   "/order/delete",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "*",
+					handler: mockHandler,
+				},
+			},
+		},
+		{
+			// 命中通配符在中间的
+			// /user/*/home
+			name:   "star in middle",
+			method: http.MethodGet,
+			path:   "/user/Tom/home",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "home",
+					handler: mockHandler,
+				},
+			},
+		},
+		{
+			// 比 /order/* 多了一段
+			name:   "overflow",
+			method: http.MethodPost,
+			path:   "/order/delete/123",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "*",
+					handler: mockHandler,
+				},
+			},
+		},
+		// 参数匹配
+		{
+			// 命中 /param/:id
+			name:   ":id",
+			method: http.MethodGet,
+			path:   "/param/123",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    ":id",
+					handler: mockHandler,
+				},
+				pathParams: map[string]string{"id": "123"},
+			},
+		},
+		{
+			// 命中 /param/:id/*
+			name:   ":id*",
+			method: http.MethodGet,
+			path:   "/param/123/abc",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "*",
+					handler: mockHandler,
+				},
+				pathParams: map[string]string{"id": "123"},
+			},
+		},
+		{
+			// 命中 /param/:id/detail
+			name:   ":id*",
+			method: http.MethodGet,
+			path:   "/param/123/detail",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "detail",
+					handler: mockHandler,
+				},
+				pathParams: map[string]string{"id": "123"},
+			},
+		},
+		{
+			// 命中 /reg/:id(.*)
+			name:   ":id(.*)",
+			method: http.MethodDelete,
+			path:   "/reg/123",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    ":id(.*)",
+					handler: mockHandler,
+				},
+				pathParams: map[string]string{"id": "123"},
+			},
+		},
+		{
+			// 命中 /:id([0-9]+)/home
+			name:   ":id([0-9]+)",
+			method: http.MethodDelete,
+			path:   "/123/home",
+			found:  true,
+			mi: &matchInfo{
+				n: &node{
+					path:    "home",
+					handler: mockHandler,
+				},
+				pathParams: map[string]string{"id": "123"},
+			},
+		},
+		{
+			// 未命中 /:id([0-9]+)/home
+			name:   "not :id([0-9]+)",
+			method: http.MethodDelete,
+			path:   "/abc/home",
+		},
+	}
+	for i := 0; i < b.N; i++ {
+		for i := 0; i < len(testCases); i++ {
+			ok := find(&r, testCases[i])
+			if !ok {
+				break
+			}
+		}
+	}
+}
