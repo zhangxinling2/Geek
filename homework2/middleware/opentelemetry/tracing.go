@@ -1,7 +1,7 @@
 package opentelemetry
 
 import (
-	"gitee.com/geektime-geekbang/geektime-go/web/homework2"
+	"Geek/homework2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"

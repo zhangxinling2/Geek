@@ -1,8 +1,8 @@
 package accesslog
 
 import (
+	web "Geek/homework2"
 	"encoding/json"
-	web "gitee.com/geektime-geekbang/geektime-go/web/homework2"
 	"log"
 )
 

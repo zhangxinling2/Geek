@@ -1,8 +1,8 @@
 package errhdl
 
 import (
+	web "Geek/homework2"
 	"bytes"
-	web "gitee.com/geektime-geekbang/geektime-go/web/homework2"
 	"html/template"
 	"testing"
 )
