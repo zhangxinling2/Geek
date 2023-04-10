@@ -42,6 +42,44 @@ func (d *Deleter[T]) Build() (*Query, error) {
 		Args: d.args,
 	}, nil
 }
+
+//func BuildWhere(expr Expression, sb *strings.Builder, args []any) error {
+//	switch e := expr.(type) {
+//	case nil:
+//		return nil
+//	case Column:
+//		sb.WriteByte('`')
+//		sb.WriteString(e.name)
+//		sb.WriteByte('`')
+//	case value:
+//		sb.WriteByte('?')
+//		args = append(args, e.val)
+//	case Predicate:
+//		_, l := e.left.(Predicate)
+//		if l {
+//			sb.WriteByte('(')
+//			BuildWhere(e.left, sb, args)
+//			sb.WriteByte(')')
+//		} else {
+//			BuildWhere(e.left, sb, args)
+//		}
+//		sb.WriteByte(' ')
+//		sb.WriteString(e.op.String())
+//		sb.WriteByte(' ')
+//		_, r := e.right.(Predicate)
+//		if r {
+//			sb.WriteByte('(')
+//			BuildWhere(e.right, sb, args)
+//			sb.WriteByte(')')
+//		} else {
+//			BuildWhere(e.right, sb, args)
+//		}
+//	default:
+//		return errors.New("orm:不支持的Predicate")
+//	}
+//	return nil
+//}
+
 func (d *Deleter[T]) BuildExpression(expr Expression) error {
 	switch e := expr.(type) {
 	case nil:
